@@ -1,0 +1,85 @@
+      Segmentating customers can be very useful to track what segment is the most active in the company. This analysis allows a more precise definition of 
+the targets of a marketing campaign (for example). A query was perfomed to find out the recency, monetary and frequency scores. These results were later used 
+to identify the amount of customers that matches the characteristcs of each of the segments.  
+
+      The results can be visualized in Looker Studio, using the link above.
+              LINK: https://lookerstudio.google.com/reporting/af7f13dd-6657-4f4a-b2f7-68197860a9b9
+
+
+SQL performed on Bigquery:
+      WITH
+        t1 AS (
+        SELECT 
+          DISTINCT(CustomerId),
+          Country,
+          COUNT(InvoiceNo) AS frequency,
+          SUM(Quantity*UnitPrice) AS monetary,
+          DATE_DIFF('2011-12-01', MAX(CAST(InvoiceDate AS DATE)), DAY) AS recency
+        FROM (
+          SELECT *
+          FROM rfm
+          WHERE InvoiceNo NOT LIKE '%C%')
+        WHERE
+          InvoiceDate BETWEEN '2010-12-01'
+          AND '2011-12-01'
+          AND CustomerId IS NOT NULL
+        GROUP BY
+          1,2),
+      
+      t2 AS (SELECT 
+          a.*,
+          --All percentiles for MONETARY
+          b.percentiles[offset(25)] AS m25, 
+          b.percentiles[offset(50)] AS m50,
+          b.percentiles[offset(75)] AS m75, 
+          b.percentiles[offset(100)] AS m100,    
+          --All percentiles for FREQUENCY
+          c.percentiles[offset(25)] AS f25, 
+          c.percentiles[offset(50)] AS f50,
+          c.percentiles[offset(75)] AS f75, 
+          c.percentiles[offset(100)] AS f100,    
+          --All percentiles for RECENCY
+          d.percentiles[offset(25)] AS r25, 
+          d.percentiles[offset(50)] AS r50,
+          d.percentiles[offset(75)] AS r75, 
+          d.percentiles[offset(100)] AS r100
+          FROM
+          t1 a,
+          (SELECT APPROX_QUANTILES(monetary, 100) percentiles FROM t1) b,
+          (SELECT APPROX_QUANTILES(frequency, 100) percentiles FROM t1) c,
+          (SELECT APPROX_QUANTILES(recency, 100) percentiles FROM t1) d),
+      
+      t3 AS (
+      SELECT *,
+      CASE 
+      WHEN monetary <= m25 THEN 1 
+      WHEN monetary <= m50 AND monetary > m25 THEN 2
+      WHEN monetary <= m75 AND monetary > m50 THEN 3
+      WHEN monetary <= m100 AND monetary > m75 THEN 4 ELSE 0 END AS m,
+      
+      CASE 
+      WHEN frequency <= f25 THEN 1 
+      WHEN frequency <= f50 AND frequency > f25 THEN 2
+      WHEN frequency <= f75 AND frequency > f50 THEN 3
+      WHEN frequency <= f100 AND frequency > f75 THEN 4 ELSE 0 END AS f,
+      
+      CASE 
+      WHEN recency <= r25 THEN 4 
+      WHEN recency <= r50 AND recency > r25 THEN 3
+      WHEN recency <= r75 AND recency > r50 THEN 2
+      WHEN recency <= r100 AND recency> r75 THEN 1 ELSE 0 END AS r
+      FROM t2)
+      
+      SELECT *,
+      CASE 
+      WHEN (m=4 AND f=4 AND r=4) OR (m=4 AND f=3 AND r=4) OR (m=4 AND f=4 AND r=3) THEN 'Best Customers'
+      WHEN (f=4 AND r=4) OR (f=4 AND r=3) OR (f=3 AND r>=3) THEN 'Loyal Customers'
+      WHEN (m=4 AND f=4 AND r<=3) OR (m=3 AND f=4) OR (m=4 AND f=3 AND r<=3) THEN 'Big Spenders'
+      WHEN (r=4 AND f <= 2) THEN 'Recent Customers'
+      WHEN (r=3 AND m=2) OR (r=2 AND m=3) OR (r=3 AND m=3) OR (r=2 AND m=2) THEN 'Promising'
+      WHEN (r=1 AND f <= 4 AND m <= 4) THEN 'Lost Customers'
+      WHEN (m<=2 AND f<=3) THEN 'Budget Occasional'
+      WHEN (m=4 AND f<3) THEN 'Big $ low frequency'
+      ELSE 'no' END AS category
+      FROM t3
+      ORDER BY CustomerID
