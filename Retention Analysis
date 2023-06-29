@@ -1,0 +1,42 @@
+      I made a retention analysis for a fictional company that offer subscriptions. The goal is to be able to see how long the subscriptions remain active 
+and how much the retention rate drops week by week. With this information it is possible to check when the company performed better, and how long after the 
+initial subscription the customers start to churn. A query was perfomed using cohorts, that aggrupated the subscriptions by the week they started. After that, it was calculated the amount of subcriptions 
+that remained active week by week, up to the 6th week. 
+      The results can be visualized in Looker Studio, using the link above.
+              LINK: https://lookerstudio.google.com/reporting/55461fcb-c87d-485c-b260-5a301eb430eb
+
+
+SQL performed on Bigquery:
+
+      WITH retention_table AS(
+        SELECT 
+      week_start,
+      COUNT(DISTINCT(user)) AS unique_user_subscription,
+      SUM(CASE WHEN week_end > week_start OR week_end IS NULL THEN 1 ELSE 0 END) AS number_subscriptions,
+      SUM(CASE WHEN week_end > DATE_ADD(week_start,INTERVAL 1 week) OR week_end IS NULL THEN 1 ELSE 0 END) AS week1,
+      SUM(CASE WHEN week_end > DATE_ADD(week_start,INTERVAL 2 week) OR week_end IS NULL THEN 1 ELSE 0 END) AS week2,
+      SUM(CASE WHEN week_end > DATE_ADD(week_start,INTERVAL 3 week) OR week_end IS NULL THEN 1 ELSE 0 END) AS week3,
+      SUM(CASE WHEN week_end > DATE_ADD(week_start,INTERVAL 4 week) OR week_end IS NULL THEN 1 ELSE 0 END) AS week4,
+      SUM(CASE WHEN week_end > DATE_ADD(week_start,INTERVAL 5 week) OR week_end IS NULL THEN 1 ELSE 0 END) AS week5,
+      SUM(CASE WHEN week_end > DATE_ADD(week_start,INTERVAL 6 week) OR week_end IS NULL THEN 1 ELSE 0 END) AS week6
+      FROM(
+      SELECT 
+      user_pseudo_id AS user,
+      DATE_TRUNC(subscription_start, week) AS week_start,
+      subscription_end AS week_end
+      FROM subscriptions
+      ORDER BY 2)
+      
+      GROUP BY 1)
+      
+      SELECT 
+      week_start,
+      unique_user_subscription,
+      number_subscriptions,
+      CONCAT(ROUND(week1 * 100 / number_subscriptions, 1),'%') AS week1,
+      CONCAT(ROUND(week2 * 100 / number_subscriptions, 1),'%') AS week2,
+      CONCAT(ROUND(week3 * 100 / number_subscriptions, 1),'%') AS week3,
+      CONCAT(ROUND(week4 * 100 / number_subscriptions, 1),'%') AS week4,
+      CONCAT(ROUND(week5 * 100 / number_subscriptions, 1),'%') AS week5,
+      CONCAT(ROUND(week6 * 100 / number_subscriptions, 1),'%') AS week6
+      FROM retention_table
