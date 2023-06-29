@@ -1,0 +1,70 @@
+        The Funnel analysis is very useful to check in which step of the website the customer leaves. It helps to understand the customer 
+behavior, that leads to the identification of possible problems. In this project I analyzed the customer behavior in three different countries,
+and also the customer behavior depending their mobile brand.
+
+      The results can be visualized in Google Sheets, using the link above.
+              LINK: https://docs.google.com/spreadsheets/d/1LXVWAM9lamqjfppOCpN4CejHQyjofbNhGw1dxbFkcGM/edit?usp=sharing
+
+
+SQL performed on Bigquery:
+
+      WITH cleaned_data AS (
+          SELECT *
+        FROM (SELECT *, 
+        ROW_NUMBER() OVER (PARTITION BY user_pseudo_id, event_name) AS row_
+        FROM `events)
+        WHERE row_ < 2 AND event_name IN ('session_start', 'view_item','select_item', 'add_to_cart', 'purchase')),
+        
+        Country_table AS (
+        SELECT 
+        event_name,
+        SUM(CASE WHEN country = 'United States' THEN 1 ELSE 0 END) AS United_States,
+        SUM(CASE WHEN country = 'India' THEN 1 ELSE 0 END) AS India,
+        SUM(CASE WHEN country = 'Canada' THEN 1 ELSE 0 END) AS Canada,
+        SUM(CASE WHEN country IN ('United States', 'India', 'Canada') AND mobile_brand_name = 'Mozilla' THEN 1 ELSE 0 END) AS Mozilla,
+          SUM(CASE WHEN country IN ('United States', 'India', 'Canada') AND mobile_brand_name = 'Microsoft' THEN 1 ELSE 0 END) AS Microsoft,
+          SUM(CASE WHEN country IN ('United States', 'India', 'Canada') AND mobile_brand_name = 'Samsung' THEN 1 ELSE 0 END) AS Samsung,
+          SUM(CASE WHEN country IN ('United States', 'India', 'Canada') AND mobile_brand_name = 'Xiaomi' THEN 1 ELSE 0 END) AS Xiaomi,
+          SUM(CASE WHEN country IN ('United States', 'India', 'Canada') AND mobile_brand_name = 'Huawei' THEN 1 ELSE 0 END) AS Huawei,
+          SUM(CASE WHEN country IN ('United States', 'India', 'Canada') AND mobile_brand_name = 'Google' THEN 1 ELSE 0 END) AS Google,
+          SUM(CASE WHEN country IN ('United States', 'India', 'Canada') AND mobile_brand_name = '<Other>' THEN 1 ELSE 0 END) AS Other,
+          SUM(CASE WHEN country IN ('United States', 'India', 'Canada') AND mobile_brand_name = 'Apple' THEN 1 ELSE 0 END) AS Apple
+        FROM cleaned_data
+        GROUP BY 1),
+        
+        eventorder AS (
+        SELECT 
+        CASE WHEN event_name = 'session_start' THEN 1 WHEN event_name = 'view_item' THEN 2 WHEN event_name = 'select_item' THEN 3 WHEN event_name = 'add_to_cart' THEN 4 WHEN event_name = 'purchase' THEN 5 ELSE 0 END AS event_order,
+        *
+        FROM Country_table
+        ORDER BY event_order)
+        
+        SELECT
+          event_order,
+          event_name,
+          United_States,
+          India,
+          Canada,
+          ROUND(100*(United_States+India+Canada)/(FIRST_VALUE(United_States+India+Canada)OVER(ORDER BY event_order)),2) AS Full_percentage,
+          ROUND(100*United_States/(FIRST_VALUE(United_States)OVER(ORDER BY event_order)),2) AS United_States_percentage,
+          ROUND(100*India/(FIRST_VALUE(India)OVER(ORDER BY event_order)),2) AS India_percentage,
+          ROUND(100*Canada/(FIRST_VALUE(Canada)OVER(ORDER BY event_order)),2) AS Canada_percentage,
+          Mozilla,
+          ROUND(100*Mozilla/(FIRST_VALUE(Mozilla)OVER(ORDER BY event_order)),2) AS Mozilla_percentage,
+          Microsoft,
+          ROUND(100*Microsoft/(FIRST_VALUE(Microsoft)OVER(ORDER BY event_order)),2) AS Microsoft_percentage,
+          Samsung,
+          ROUND(100*Samsung/(FIRST_VALUE(Samsung)OVER(ORDER BY event_order)),2) AS Samsung_percentage,
+          Xiaomi,
+          ROUND(100*Xiaomi/(FIRST_VALUE(Xiaomi)OVER(ORDER BY event_order)),2) AS Xiaomi_percentage,
+          Huawei,
+          ROUND(100*Huawei/(FIRST_VALUE(Huawei)OVER(ORDER BY event_order)),2) AS Huawei_percentage,
+          Google,
+          ROUND(100*Google/(FIRST_VALUE(Google)OVER(ORDER BY event_order)),2) AS Google_percentage,
+          Other,
+          ROUND(100*Other/(FIRST_VALUE(Other)OVER(ORDER BY event_order)),2) AS Other_percentage,
+          Apple,
+          ROUND(100*Apple/(FIRST_VALUE(Apple)OVER(ORDER BY event_order)),2) AS Apple_percentage
+        FROM
+          eventorder
+          ORDER BY event_order
